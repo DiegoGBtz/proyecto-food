@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1A1C1E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Motor adaptativo de despensa, presupuesto ($400 MXN), recetario dinámico y registro nutricional para Diego.">
+  <title>Proyecto Food v6 — Heritage Nutrition Studio</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=6.0">
+</head>
+<body>
+
+<!-- ==========================================================================
+     STICKY LEDGER HEADER
+     ========================================================================== -->
+<header class="top-bar">
+  <div class="top-bar-inner">
+    <div class="brand-row">
+      <div class="brand-title-group">
+        <span class="brand-title">HERITAGE NUTRITION STUDIO</span>
+        <span class="brand-tag">PROYECTO FOOD v6 · PWA</span>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-primary btn-sm" onclick="adaptMenuToPurchase(true)">⚡ Adaptar Menú a Despensa</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportBackupJSON()" title="Descargar respaldo JSON">💾 Respaldo</button>
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;" title="Cargar respaldo JSON">
+          📂 Importar <input type="file" accept=".json" style="display:none;" onchange="importBackupJSON(event)">
+        </label>
+      </div>
+    </div>
+
+    <div class="ledger-strip">
+      <div class="ledger-cell">
+        <div class="ledger-label"><span>KCAL HOY</span><span id="hdr-day-lbl">LUN</span></div>
+        <div class="ledger-val" id="hdr-kcal">0 / 2550</div>
+        <div class="ledger-bar"><div class="ledger-fill" id="bar-kcal" style="width:0%; background:#E09F3E;"></div></div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label"><span>PROTEÍNA</span><span>META 165g</span></div>
+        <div class="ledger-val" id="hdr-p">0 / 165g</div>
+        <div class="ledger-bar"><div class="ledger-fill" id="bar-p" style="width:0%; background:#B8422E;"></div></div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label"><span>CARBOS</span><span>META 275g</span></div>
+        <div class="ledger-val" id="hdr-c">0 / 275g</div>
+        <div class="ledger-bar"><div class="ledger-fill" id="bar-c" style="width:0%; background:#3B82F6;"></div></div>
+      </div>
+      <div class="ledger-cell">
+        <div class="ledger-label"><span>GRASAS</span><span>META 85g</span></div>
+        <div class="ledger-val" id="hdr-g">0 / 85g</div>
+        <div class="ledger-bar"><div class="ledger-fill" id="bar-g" style="width:0%; background:#10B981;"></div></div>
+      </div>
+      <div class="ledger-cell highlight-budget">
+        <div class="ledger-label"><span>DESPENSA SEM.</span><span>TOPE $400</span></div>
+        <div class="ledger-val" id="hdr-budget">$0 / $400</div>
+        <div class="ledger-bar"><div class="ledger-fill" id="bar-budget" style="width:0%; background:#FFFFFF;"></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ========================================================================
+       TAB 1: CESTO / DESPENSA SEMANAL + CATÁLOGO DE PRODUCTOS (3B / CÁDIZ / CASA)
+       ======================================================================== -->
+  <section id="tab-compra" class="section-view active">
+    <div class="editorial-header">
+      <div>
+        <span class="badge badge-accent">MÓDULO 01 · CESTO DE DESPENSA & CATÁLOGO DE PRODUCTOS</span>
+        <h1 class="t-h1" style="margin-top:4px;">Mi Cesto (Despensa) y Catálogo de Productos</h1>
+        <p class="editorial-subtitle">
+          Escribe libremente tu compra (ej. <code>pollo 3B 1 pz, huevo 20 pz, avena 1 bolsa</code>) para llenar tu <strong>Cesto Semanal</strong> al instante, o administra tus productos y presentaciones (<strong>Tiendas 3B Metepec</strong>, <strong>Cádiz</strong> o <strong>Casa $0</strong>) en el <strong>Catálogo de Productos</strong>.
+        </p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="adaptMenuToPurchase(true)">⚡ Adaptar Menú a mi Despensa</button>
+        <button class="btn btn-secondary" onclick="resetCatalogDefaults()">↺ Restaurar Base</button>
+      </div>
+    </div>
+
+    <!-- Sub-navigation: Cesto/Despensa vs Catálogo de Productos -->
+    <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:2px solid var(--c-outline); padding-bottom:10px; flex-wrap:wrap;">
+      <button id="subbtn-cesto" class="btn btn-primary" onclick="switchCompraSubView('cesto')">
+        🧺 1. Mi Cesto / Despensa de la Semana (<span id="cesto-count-lbl">0</span> insumos)
+      </button>
+      <button id="subbtn-catalogo" class="btn btn-secondary" onclick="switchCompraSubView('catalogo')">
+        🏪 2. Catálogo de Productos y Presentaciones (3B / Cádiz / Casa)
+      </button>
+    </div>
+
+    <!-- KPI Summary Boxes -->
+    <div class="engine-grid" id="budget-kpis"></div>
+
+    <!-- SUBVIEW 1A: CESTO / DESPENSA SEMANAL + INTÉRPRETE DE TEXTO LIBRE -->
+    <div id="subview-cesto">
+      <!-- Natural Language Smart Input Card -->
+      <div class="card" style="border:2px solid var(--c-tertiary); background:#FFFDFC;">
+        <div class="card-header" style="margin-bottom:8px; padding-bottom:8px;">
+          <div>
+            <span class="badge badge-accent">✨ INTÉRPRETE INTELIGENTE DE COMPRA Y DESPENSA</span>
+            <h2 class="t-h3" style="margin-top:4px;">Escribe libremente lo que compraste o tienes en tu despensa</h2>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="fillSampleSmartText('3b')">Ej: Compra en 3B Metepec</button>
+            <button class="btn btn-secondary btn-sm" onclick="fillSampleSmartText('cadiz')">Ej: Compra rápida Cádiz</button>
+          </div>
+        </div>
+        <p style="font-size:0.82rem; color:var(--c-secondary); margin-bottom:8px;">
+          Separa por comas o saltos de línea. Reconoce presentaciones por pieza/paquete o gramos (ej. <code>pollo 3B 1 pz</code> → sabe que 1 pz = <strong>500 g</strong> y cuesta <strong>$79</strong>; <code>muslos cadiz 1 paq</code> → <strong>600 g</strong> a <strong>$60</strong>; o escribe precios directos como <code>queso panela 400g $52</code>).
+        </p>
+        <div style="display:flex; gap:8px; align-items:stretch; flex-wrap:wrap;">
+          <textarea id="smart-cesto-input" class="input-field mono" rows="2" style="flex:1; min-width:260px; font-size:0.88rem;" placeholder="Escribe aquí... ej: pollo 3B 2 pz, res 1 paq, avena 600g, huevo 20 pz, atun 3 latas, yogurt 500g" oninput="previewSmartCestoText()"></textarea>
+          <div style="display:flex; flex-direction:column; gap:6px; justify-content:center;">
+            <button class="btn btn-primary" onclick="applySmartCestoText(false)">➕ Sumar al Cesto</button>
+            <button class="btn btn-ink btn-sm" onclick="applySmartCestoText(true)" title="Vacía el cesto actual y deja solo lo que escribiste">🔄 Reemplazar Cesto con Esto</button>
+          </div>
+        </div>
+        <div id="smart-cesto-preview" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+      </div>
+
+      <!-- Quick Add from Catalog Bar -->
+      <div class="card-variant" style="padding:12px 16px;">
+        <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+          <div style="flex:2; min-width:200px;">
+            <label class="field-label">Elegir Producto del Catálogo para meter al Cesto</label>
+            <select id="quick-cesto-select" class="input-field" onchange="updateQuickCestoUnitHint()"></select>
+          </div>
+          <div style="width:130px;">
+            <label class="field-label">Modo de Carga</label>
+            <select id="quick-cesto-mode" class="input-field mono" onchange="updateQuickCestoUnitHint()">
+              <option value="packs">Por Paq / Pz Comercial</option>
+              <option value="units">Por Gramos / Unid.</option>
+            </select>
+          </div>
+          <div style="width:120px;">
+            <label class="field-label" id="quick-cesto-qty-lbl">Cant. (Paq/Pz)</label>
+            <input type="number" id="quick-cesto-qty" class="input-field mono" value="1" min="0.1" step="any">
+          </div>
+          <button class="btn btn-primary" onclick="quickAddSelectedToCesto()">+ Meter al Cesto</button>
+          <button class="btn btn-secondary" style="margin-left:auto;" onclick="clearEntireCesto()">🗑️ Vaciar Cesto</button>
+        </div>
+      </div>
+
+      <!-- Smart Budget & Macro Engine Suggestions -->
+      <div class="card" id="engine-suggestions-card">
+        <div class="card-header">
+          <div>
+            <span class="t-label-caps" style="color:var(--c-tertiary);">DIAGNÓSTICO DEL MOTOR NUTRICIONAL Y FINANCIERO</span>
+            <h2 class="t-h3">Sugerencias basadas en tu Cesto / Despensa ($400 MXN)</h2>
+          </div>
+          <span class="badge badge-neutral" id="adaptation-status-badge">SINCRONIZADO CON DESPENSA</span>
+        </div>
+        <div id="engine-suggestions-list"></div>
+      </div>
+
+      <!-- Active Basket / Pantry Table -->
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:14px 16px; border-bottom:1px solid var(--c-outline); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <h2 class="t-h3">🧺 Tu Cesto / Despensa Activa de esta Semana</h2>
+            <p style="font-size:0.8rem; color:var(--c-secondary);">Estos son los insumos con los que el motor adapta tus recetas y tu menú semanal. Puedes ajustar gramos, sumar paquetes o quitar cualquier ingrediente con <strong>🗑️ Quitar</strong>.</p>
+          </div>
+          <span class="badge badge-success">DESPENSA ACTIVA</span>
+        </div>
+        <div class="table-wrap" style="border:none; border-radius:0;">
+          <table class="editorial-table">
+            <thead>
+              <tr>
+                <th>Insumo en Despensa</th>
+                <th>Presentación Base</th>
+                <th>Paquetes / Pz</th>
+                <th>Cantidad Total</th>
+                <th>Costo en Despensa</th>
+                <th>Aporte Total (Kcal / P / C / G)</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="cesto-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBVIEW 1B: CATÁLOGO MAESTRO DE PRODUCTOS (CARGAR / EDITAR / BORRAR) -->
+    <div id="subview-catalogo" style="display:none;">
+      <div class="card-variant">
+        <div class="card-header" style="margin-bottom:8px; padding-bottom:8px;">
+          <span class="t-h3">➕ Dar de Alta Nuevo Producto en el Catálogo (3B / Cádiz / Casa)</span>
+          <span class="t-label-caps" style="color:var(--c-secondary);">SE GUARDA PARA USARLO CON TEXTO LIBRE (EJ. "POLLO 3B 1 PZ")</span>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap:8px; align-items:end;">
+          <div>
+            <label class="field-label">Nombre / Marca (ej. Pollo 3B)</label>
+            <input type="text" id="new-ing-name" class="input-field" placeholder="Ej. Pollo 3B">
+          </div>
+          <div>
+            <label class="field-label">Presentación (1 pz/paq)</label>
+            <input type="text" id="new-ing-pres" class="input-field" placeholder="Ej. 1 pz / Bolsa 500g">
+          </div>
+          <div>
+            <label class="field-label">Unidad Medida</label>
+            <select id="new-ing-unit" class="input-field mono">
+              <option value="g">g (gramos)</option>
+              <option value="ml">ml (mililitros)</option>
+              <option value="pz">pz (piezas)</option>
+              <option value="lata">lata (140g)</option>
+              <option value="reb">reb (rebanadas)</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Contenido x 1 Pz/Paq</label>
+            <input type="number" id="new-ing-pres-qty" class="input-field mono" placeholder="500" value="500">
+          </div>
+          <div>
+            <label class="field-label">Precio Presentación ($)</label>
+            <input type="number" id="new-ing-price" class="input-field mono" placeholder="79" value="79">
+          </div>
+          <div>
+            <label class="field-label">Tienda / Origen</label>
+            <select id="new-ing-source" class="input-field">
+              <option value="super">🏪 Tiendas 3B / Súper ($)</option>
+              <option value="casa">🏠 Casa Metepec ($0)</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Kcal (x100g o 1u)</label>
+            <input type="number" id="new-ing-kcal" class="input-field mono" value="165">
+          </div>
+          <div>
+            <label class="field-label">Prot g</label>
+            <input type="number" id="new-ing-p" class="input-field mono" value="31">
+          </div>
+          <div>
+            <label class="field-label">Carb g</label>
+            <input type="number" id="new-ing-c" class="input-field mono" value="0">
+          </div>
+          <div>
+            <label class="field-label">Grasa g</label>
+            <input type="number" id="new-ing-g" class="input-field mono" value="3.6">
+          </div>
+          <div>
+            <button class="btn btn-primary" style="width:100%;" onclick="addNewIngredient()">+ Guardar Producto</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:14px 16px; border-bottom:1px solid var(--c-outline); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <h2 class="t-h3">🏪 Catálogo Maestro de Productos y Presentaciones</h2>
+            <p style="font-size:0.8rem; color:var(--c-secondary);">Aquí defines cuánto pesa y cuánto cuesta cada producto comercial. Puedes <strong>borrar cualquier ingrediente (🗑️)</strong> o enviarlo directo al cesto.</p>
+          </div>
+          <span class="badge badge-neutral">TODOS LOS PRODUCTOS BORRABLES Y EDITABLES</span>
+        </div>
+        <div class="table-wrap" style="border:none; border-radius:0;">
+          <table class="editorial-table">
+            <thead>
+              <tr>
+                <th>Producto / Origen</th>
+                <th>Nombre Presentación</th>
+                <th>Contenido x Paq/Pz</th>
+                <th>Precio Pres.</th>
+                <th>Macros (x 100g/ml o 1 pz)</th>
+                <th>Enviar al Cesto</th>
+                <th>Borrar</th>
+              </tr>
+            </thead>
+            <tbody id="catalog-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       TAB 2: RECETARIO DINÁMICO ADAPTADO A LA COMPRA
+       ======================================================================== -->
+  <section id="tab-recetario" class="section-view">
+    <div class="editorial-header">
+      <div>
+        <span class="badge badge-accent">MÓDULO 02 · RECETARIO CONECTADO AL STOCK</span>
+        <h1 class="t-h1" style="margin-top:4px;">Recetario Dinámico y Calculadora de Macros</h1>
+        <p class="editorial-subtitle">
+          Cada receta toma en vivo los precios y unidades cargados en tu <strong>Cesto / Despensa</strong>. Visualiza los macros exactos por porción, el costo real, cuántas porciones puedes cocinar con tu stock actual y ajusta las cantidades en gramos o piezas.
+        </p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="adaptMenuToPurchase(true)">⚡ Sincronizar Recetas con mi Despensa</button>
+        <button class="btn btn-secondary" onclick="toggleNewRecipeModal()">+ Crear Nueva Receta</button>
+      </div>
+    </div>
+
+    <!-- New Custom Recipe Builder (Hidden by default) -->
+    <div class="card-variant" id="new-recipe-builder" style="display:none;">
+      <div class="card-header">
+        <span class="t-h3">🍳 Crear Nueva Receta con tus Insumos del Catálogo</span>
+        <button class="btn btn-secondary btn-sm" onclick="toggleNewRecipeModal()">Cerrar</button>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:12px;">
+        <div>
+          <label class="field-label">Nombre de la Receta</label>
+          <input type="text" id="nr-name" class="input-field" placeholder="Ej. Burrito Proteico Congelable">
+        </div>
+        <div>
+          <label class="field-label">Porciones que rinde</label>
+          <input type="number" id="nr-servings" class="input-field mono" value="4" min="1">
+        </div>
+        <div>
+          <label class="field-label">Nombre de la Porción</label>
+          <input type="text" id="nr-unit-label" class="input-field" placeholder="Ej. 1 burrito">
+        </div>
+        <div>
+          <label class="field-label">Método / Equipo</label>
+          <input type="text" id="nr-method" class="input-field" placeholder="Ej. Sartén de hierro / Congelador">
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label class="field-label">Ingredientes de la receta (del catálogo)</label>
+        <div id="nr-ings-container"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addNewRecipeIngRow()">+ Añadir Ingrediente</button>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label class="field-label">Pasos de preparación</label>
+        <input type="text" id="nr-steps" class="input-field" placeholder="1. Mezclar ingredientes. 2. Cocinar en sartén de hierro y congelar.">
+      </div>
+      <button class="btn btn-primary" onclick="saveNewCustomRecipe()">Guardar Receta en mi Recetario</button>
+    </div>
+
+    <!-- Recipes Grid -->
+    <div class="recipes-grid" id="recipes-grid-container"></div>
+  </section>
+
+  <!-- ========================================================================
+       TAB 3: MENÚ SEMANAL ADAPTADO Y REGISTRO DIARIO
+       ======================================================================== -->
+  <section id="tab-menu" class="section-view">
+    <div class="editorial-header">
+      <div>
+        <span class="badge badge-accent">MÓDULO 03 · MENÚ ADAPTADO & TRACKER DIARIO</span>
+        <h1 class="t-h1" style="margin-top:4px;">Menú de la Semana y Registro de Consumo</h1>
+        <p class="editorial-subtitle">
+          Las porciones de tu menú se escalan automáticamente según las cantidades de tu despensa para que no sobre ni se eche a perder nada. Marca cada bloque conforme lo comas.
+        </p>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="markAllDayMeals(true)">✓ Marcar Día Completo</button>
+        <button class="btn btn-secondary btn-sm" onclick="markAllDayMeals(false)">↺ Reiniciar Día</button>
+        <button class="btn btn-ink btn-sm" onclick="copyDaySummary()">📋 Copiar Resumen</button>
+      </div>
+    </div>
+
+    <!-- 7-Day Selector -->
+    <div class="day-strip" id="day-selector"></div>
+
+    <!-- Free-text Natural Language Meal Logger for the Day -->
+    <div class="card" style="border-left:4px solid var(--c-tertiary); background:#FFFDFC; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+        <div>
+          <span class="badge badge-accent">✨ REGISTRO RÁPIDO POR TEXTO LIBRE</span>
+          <span class="t-h3" style="margin-left:6px;">Escribe lo que comiste hoy y la herramienta calcula tus macros</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="text" id="smart-meal-text" class="input-field mono" style="flex:1; min-width:240px;" placeholder="Ej: 3 hamburguesas de pollo, 1 arroz, 2 huevos, 1 sandwich panela o pollo 3B 250g">
+        <button class="btn btn-primary btn-sm" onclick="parseAndLogFreeTextMeal()">➕ Interpretar y Registrar Comida</button>
+      </div>
+    </div>
+
+    <!-- Day Context Banner -->
+    <div class="card-variant" id="day-banner-info" style="margin-bottom:16px;"></div>
+
+    <!-- Meals Checklist Container -->
+    <div id="day-meals-container"></div>
+
+    <!-- Quick Extra Food & Hydration Row -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">💧 Hidratación (Meta 3.0 L) y Centrum</span>
+          <span class="badge badge-ice" id="water-badge">0.0 / 3.0 L</span>
+        </div>
+        <p style="font-size:0.8rem; color:var(--c-secondary); margin-bottom:10px;">
+          Toca cada botella de 500 ml completada hoy (0.5 L despertar + 1.0 L oficina + 1.0 L gym + 0.5 L cena):
+        </p>
+        <div id="water-buttons" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;"></div>
+        <div id="centrum-box"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">➕ Registrar Alimento Extra Manual</span>
+          <span class="t-label-caps" style="color:var(--c-secondary);">FUERA DEL PLAN</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:8px; margin-bottom:8px;">
+          <div>
+            <label class="field-label">Concepto</label>
+            <input type="text" id="extra-name" class="input-field" placeholder="Ej. Barrita / Café">
+          </div>
+          <div>
+            <label class="field-label">Kcal</label>
+            <input type="number" id="extra-kcal" class="input-field mono" placeholder="150">
+          </div>
+          <div>
+            <label class="field-label">Prot (g)</label>
+            <input type="number" id="extra-p" class="input-field mono" placeholder="5">
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="addExtraFood()">+ Añadir al Registro de Hoy</button>
+        <div id="extra-list-today" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       TAB 4: PREP METEPEC & DESCONGELACIÓN CÁDIZ
+       ======================================================================== -->
+  <section id="tab-prep" class="section-view">
+    <div class="editorial-header">
+      <div>
+        <span class="badge badge-ice">MÓDULO 04 · LOGÍSTICA METEPEC → CÁDIZ 101</span>
+        <h1 class="t-h1" style="margin-top:4px;">Batch Cooking en Metepec y Tuppers</h1>
+        <p class="editorial-subtitle">
+          Cantidades exactas actualizadas con tu despensa de la semana para cocinar en 90 minutos usando tu <strong>refractario</strong>, <strong>mini sartén de hierro</strong>, procesador y hornito eléctrico.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="t-h2">🏠 Checklist de Cocina Dominical (Cantidades Adaptadas)</span>
+        <span class="badge badge-accent">90 MINUTOS TOTALES</span>
+      </div>
+      <div id="prep-checklist-container"></div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">🧊 Rol Nocturno: Congelador → Refri (10:00 PM)</span>
+          <span class="badge badge-ice">CÁDIZ 101</span>
+        </div>
+        <div class="ing-line"><span><strong>Lunes 10 PM (para Martes)</strong></span><span>3 Frittatas + 2 Hamb. Res + 3 Hamb. Pollo + 200g Arroz</span></div>
+        <div class="ing-line"><span><strong>Martes 10 PM (para Miércoles)</strong></span><span>4 Mini Hot Cakes + 2 Hamb. Atún + 3 Hamb. Pollo + 200g Arroz</span></div>
+        <div class="ing-line"><span><strong>Miércoles 10 PM (para Jueves)</strong></span><span>3 Frittatas + 2 Hamb. Res + 3 Hamb. Pollo + 200g Arroz</span></div>
+        <div class="ing-line"><span><strong>Jueves 10 PM (para Viernes)</strong></span><span>4 Mini Hot Cakes + 2 Hamb. Atún + 200g Arroz</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">🍱 Mapa de tus 6 Tuppers</span>
+          <span class="badge badge-neutral">INVENTARIO ACTUAL</span>
+        </div>
+        <div class="ing-line"><span><strong>[GD] Grande Dividido (1.6 L)</strong></span><span>Lunch Oficina (Hamburguesas + Arroz)</span></div>
+        <div class="ing-line"><span><strong>[GC] Grande Cuadrado (1.6 L)</strong></span><span>Bodega en Congelador Cádiz (Res/Pollo)</span></div>
+        <div class="ing-line"><span><strong>[CUA] Cuadrado Mediano (1.0 L)</strong></span><span>Bodega en Congelador Cádiz (Frittatas/Atún)</span></div>
+        <div class="ing-line"><span><strong>[CH1] Chico (350 ml)</strong></span><span>Overnight Oats (noches Lun y Mié)</span></div>
+        <div class="ing-line"><span><strong>[CH2] Chico (350 ml)</strong></span><span>Yogurt Deslactosado + Amaranto</span></div>
+        <div class="ing-line"><span><strong>[RED] Redondo (300 ml)</strong></span><span>Descongelación nocturna en refri</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       TAB 5: DESIGN.MD & AUDITORÍA NUTRICIONAL
+       ======================================================================== -->
+  <section id="tab-info" class="section-view">
+    <div class="editorial-header">
+      <div>
+        <span class="badge badge-neutral">MÓDULO 05 · ESPECIFICACIÓN Y SISTEMA VISUAL</span>
+        <h1 class="t-h1" style="margin-top:4px;">Ficha Clínica y Sistema DESIGN.md</h1>
+        <p class="editorial-subtitle">
+          Parámetros fisiológicos de Diego (25 años, 1.80 m, 75 kg, Cádiz 101 / SmartFit Galerías Insurgentes) y tokens activos del archivo <code>DESIGN.md</code>.
+        </p>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap:16px;">
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">🩺 Auditoría Fisiológica y Requerimientos</span>
+          <span class="badge badge-success">RECOMPOSICIÓN</span>
+        </div>
+        <div class="ing-line"><span><strong>TMB (Mifflin-St Jeor)</strong></span><span class="t-mono-num">1,755 kcal</span></div>
+        <div class="ing-line"><span><strong>NEAT (~8,000 pasos/día)</strong></span><span class="t-mono-num">+380 kcal</span></div>
+        <div class="ing-line"><span><strong>EAT (Fuerza SmartFit) + TEF</strong></span><span class="t-mono-num">+415 kcal</span></div>
+        <div class="ing-line"><span><strong>Meta Diaria Total</strong></span><span class="t-mono-num" style="color:var(--c-tertiary);">2,550 kcal</span></div>
+        <div class="ing-line"><span><strong>Proteína (2.2 g/kg)</strong></span><span class="t-mono-num">165 – 170 g</span></div>
+        <div class="ing-line"><span><strong>Carbohidratos (3.6 g/kg)</strong></span><span class="t-mono-num">275 g</span></div>
+        <div class="ing-line"><span><strong>Grasas (1.1 g/kg · Aguacate/Yema)</strong></span><span class="t-mono-num">85 g</span></div>
+        <div class="ing-line"><span><strong>Suplementación Actual</strong></span><span>1 tab Centrum en Comida (sin Whey/Creatina)</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="t-h3">🎨 Tokens Activos (DESIGN.md)</span>
+          <span class="badge badge-accent">HERITAGE STUDIO</span>
+        </div>
+        <div class="ing-line"><span><strong>Primary (Deep Ink)</strong></span><span class="t-mono-num">#1A1C1E</span></div>
+        <div class="ing-line"><span><strong>Secondary (Architectural Slate)</strong></span><span class="t-mono-num">#5A6065</span></div>
+        <div class="ing-line"><span><strong>Tertiary (Boston Clay)</strong></span><span class="t-mono-num" style="color:var(--c-tertiary);">#B8422E</span></div>
+        <div class="ing-line"><span><strong>Neutral (Warm Limestone)</strong></span><span class="t-mono-num">#F7F5F2</span></div>
+        <div class="ing-line"><span><strong>Headlines & Body</strong></span><span class="t-mono-num">Public Sans</span></div>
+        <div class="ing-line"><span><strong>Labels & Tabular Numerals</strong></span><span class="t-mono-num">Space Grotesk</span></div>
+        <div class="ing-line"><span><strong>Archivo Normativo</strong></span><span class="t-mono-num">Proyecto Food/DESIGN.md</span></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ==========================================================================
+     BOTTOM NAVIGATION
+     ========================================================================== -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="nav-tab active" data-tab="compra" onclick="switchTab('compra')">
+      <span class="ico">🧺</span>
+      <span>Cesto & Catálogo</span>
+    </button>
+    <button class="nav-tab" data-tab="recetario" onclick="switchTab('recetario')">
+      <span class="ico">📖</span>
+      <span>Recetario</span>
+    </button>
+    <button class="nav-tab" data-tab="menu" onclick="switchTab('menu')">
+      <span class="ico">🍽️</span>
+      <span>Menú & Registro</span>
+    </button>
+    <button class="nav-tab" data-tab="prep" onclick="switchTab('prep')">
+      <span class="ico">🏠</span>
+      <span>Prep Metepec</span>
+    </button>
+    <button class="nav-tab" data-tab="info" onclick="switchTab('info')">
+      <span class="ico">📐</span>
+      <span>DESIGN & Ficha</span>
+    </button>
+  </div>
+</nav>
+
+<div id="toast">Menú y Recetario actualizados</div>
+
+<script src="./app.js?v=6.0"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW error:', err));
+    });
+  }
+</script>
+</body>
+</html>
+
